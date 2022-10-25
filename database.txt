@@ -1,0 +1,40 @@
+string[] private successfulGames;
+string[] private cancelledGames;
+
+erc20_contract_address
+platform_percent
+
+balance => gameId => 10000
+homePlayers => gameId => []
+awayPlayers => gameId => []
+isPlayed => gameId => playerId => boolean
+winner => gameId => string
+
+games => gameId => {
+ homeTeam
+ awayTeam
+ erc20Address -defaulting to erc20ContractAddress
+ fee 
+ platformPercent -defaulting to platformPercent
+ startTime
+ endTime
+}
+
+permissions
+- deployer
+
+events
+- LogGame
+- LogGameWinners
+
+Modifiers
+-isCreator
+-isEditor
+-isCloser
+
+Functions
+ createGame
+ cancelGame
+ editGame
+ closeToIncentivize
+ play
