@@ -14,9 +14,9 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
     string public name;
 
-    address private erc20ContractAddress;
-    uint256 private platformPercent;
-    address private commissionRecipient;
+    address public ERC20_CONTRACT_ADDRESS;
+    uint256 public PLATFORM_PERCENT;
+    address public COMMISSION_RECIPIENT;
 
     bytes32 public constant CREATOR = keccak256("CREATOR");
     bytes32 public constant EDITOR = keccak256("EDITOR");
@@ -103,7 +103,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     ) external isCreator {
 
         bytes32 _gameId = keccak256(abi.encodePacked(_homeTeam, _awayTeam));
-        require( games[_gameId].startTime > 0, "ERROR: This game has not added.");
+        require( games[_gameId].startTime <= 0, "ERROR: This game has added.");
 
         games[_gameId] = Game({
             homeTeam: _homeTeam,
@@ -184,13 +184,13 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         );
     }
 
-    function closeToIncentivize(bytes32 _gameId, bytes3 _winnerTeam) external isCloser {
+    function closeToIncentivize(bytes32 _gameId, bytes32 _winnerTeam) external isCloser {
         // must be greater end date
         Game storage targetGame = games[_gameId];
         require( uint64(block.timestamp) > targetGame.endTime, "ERROR: This game has not ended.");
         
         // Process Payment to list of players
-        if ( _winnerTeam == bytes32("DRAW_DROPED") ) {
+        if ( _winnerTeam == "DRAW" ) {
 
             uint256 _amount = balances[_gameId] / (homePlayers[_gameId].length + awayPlayers[_gameId].length);
 
@@ -199,7 +199,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
             _payoutToWinners(awayPlayers[_gameId], _amount);
 
         } else {
-            uint256 _platformPercent = balances[_gameId] * platformPercent / 10000;
+            uint256 _platformPercent = balances[_gameId] * PLATFORM_PERCENT / 10000;
             uint256 _amountLeft = balances[_gameId] - _platformPercent;
 
             if ( targetGame.homeTeam == _winnerTeam ) {
@@ -211,7 +211,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
                 emit LogGameWinners(
                     _gameId, 
                     _winnerTeam,
-                    platformPercent, 
+                    PLATFORM_PERCENT, 
                     homePlayers[_gameId], 
                     _amountForEach
                 );
@@ -225,13 +225,13 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
                 emit LogGameWinners(
                     _gameId, 
                     _winnerTeam, 
-                    platformPercent, 
+                    PLATFORM_PERCENT, 
                     awayPlayers[_gameId], 
                     _amountForEach
                 );
             }
 
-            _payTokenFromContract(commissionRecipient, _platformPercent);
+            _payTokenFromContract(COMMISSION_RECIPIENT, _platformPercent);
         }
 
         winners[_gameId] = _winnerTeam;
@@ -291,23 +291,18 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         }
     }
 
-    /*
-    ** erc20ContractAddress
-    ** platformPercent
-    ** commissionRecipient
-    */
     function setCommission(address _erc20ContractAddress, uint256 _platformPercent, address _commissionRecipient) external payable onlyOwner {
         
         if ( _erc20ContractAddress != address(0) ) {
-            erc20ContractAddress = _erc20ContractAddress;
+            ERC20_CONTRACT_ADDRESS = _erc20ContractAddress;
         }
 
         if ( _platformPercent != 0 ) {
-            platformPercent = _platformPercent;
+            PLATFORM_PERCENT = _platformPercent;
         }
 
         if ( _commissionRecipient != address(0) ) {
-            commissionRecipient = _commissionRecipient;
+            COMMISSION_RECIPIENT = _commissionRecipient;
         }
     }
  
@@ -323,10 +318,6 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         return winners[_gameId];
     }
 
-    function getRoles() external pure returns(bytes32, bytes32, bytes32) {
-        return (CREATOR, EDITOR, CLOSER);
-    }
-
     /*
     * Internal Functions
     */
@@ -335,12 +326,13 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
             _payTokenFromContract(_addresses[i], _amount);
         }
     }
+
     function _payTokenFromAcc(address _sender, address _receiver, uint256 _amount) internal {
-        IERC20Upgradeable(erc20ContractAddress).transferFrom(_sender, _receiver, _amount);
+        IERC20Upgradeable(ERC20_CONTRACT_ADDRESS).transferFrom(_sender, _receiver, _amount);
     }
 
     function _payTokenFromContract(address _receiver, uint256 _amount) internal {
-        IERC20Upgradeable(erc20ContractAddress).transfer(_receiver, _amount);
+        IERC20Upgradeable(ERC20_CONTRACT_ADDRESS).transfer(_receiver, _amount);
     }
 
 }
