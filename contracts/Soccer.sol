@@ -39,9 +39,9 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     mapping(bytes32 => address[]) public awayPlayers;
     mapping(bytes32 => mapping(address => bool)) public isPlayed;
 
-    function initialize(string memory _name) public initializer {
+    function initialize() public initializer {
 
-        name = _name;
+        name = "Soccer Vote";
  
         _grantRole(CREATOR, msg.sender);
         _grantRole(EDITOR, msg.sender);
@@ -259,10 +259,10 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         require(isPlayed[_gameId][msg.sender] == false, "ERROR: You have already played.");
 
         if ( targetGame.homeTeam == _selectedTeam ) {
-            homePlayers[_gameId].push(msg.sender);
+            homePlayers[_gameId].push(payable(msg.sender));
         }
         if ( targetGame.awayTeam == _selectedTeam ) {
-            awayPlayers[_gameId].push(msg.sender);
+            awayPlayers[_gameId].push(payable(msg.sender));
         }
         // Transfer ERC20 Token
         if ( targetGame.fee > 0 ) {
@@ -291,7 +291,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         }
     }
 
-    function setCommission(address _erc20ContractAddress, uint256 _platformPercent, address _commissionRecipient) external payable onlyOwner {
+    function setCommission(address _erc20ContractAddress, uint256 _platformPercent, address _commissionRecipient) external onlyOwner {
         
         if ( _erc20ContractAddress != address(0) ) {
             ERC20_CONTRACT_ADDRESS = _erc20ContractAddress;
@@ -316,6 +316,10 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
     function getWinners(bytes32 _gameId) public view returns(bytes32) {
         return winners[_gameId];
+    }
+
+    function getRoles() public pure returns(bytes32, bytes32, bytes32) {
+        return (CREATOR, EDITOR, CLOSER);
     }
 
     /*

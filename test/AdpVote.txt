@@ -24,6 +24,7 @@ const shareCount = 5;
 const toggleVote = true;
 const UserTokenBalance = 1000; // for minting, no need to convert to WEI
 const percentage = 0; // 1.5%
+const dispensable = false;
 
 describe("AdpVote", function () {
 
@@ -50,6 +51,9 @@ describe("AdpVote", function () {
     let user8;
     let user9;
     let user10;
+
+    let _tokenIds;
+    let _addresses;
 
     beforeEach(async function () {
 
@@ -86,15 +90,22 @@ describe("AdpVote", function () {
         nft = await NftContract.deploy("TEST", "TST");
         await nft.deployed();
 
-        await nft.mintNft(user1.address, "test.nft.uri"); // token id 1
-        await nft.mintNft(user1.address, "test.nft.uri"); // token id 2    
-        await nft.mintNft(user1.address, "test.nft.uri"); // token id 3
+        await nft.mintNft(deployedUser.address, "test.nft.uri"); // token id 1
+        await nft.mintNft(deployedUser.address, "test.nft.uri"); // token id 2    
+        await nft.mintNft(deployedUser.address, "test.nft.uri"); // token id 3
 
-        await nft.mintNft(user2.address, "test.nft.uri"); // token id 4
-        await nft.mintNft(user2.address, "test.nft.uri"); // token id 5
-        await nft.mintNft(user2.address, "test.nft.uri"); // token id 6
+        await nft.mintNft(deployedUser.address, "test.nft.uri"); // token id 4
+        await nft.mintNft(deployedUser.address, "test.nft.uri"); // token id 5
+        await nft.mintNft(deployedUser.address, "test.nft.uri"); // token id 6
 
-        await nft.mintNft(user8.address, "test.nft.uri"); // token id 7
+        await nft.mintNft(deployedUser.address, "test.nft.uri"); // token id 7
+        
+        _tokenIds = [1, 2, 3, 4, 5, 6, 7];
+        _addresses = [ 
+              user1.address, user1.address, user1.address, 
+              user2.address, user2.address, user2.address,
+              user8.address
+        ];
 
         nftOwnerAddress = user1.address;
         nftAddress = nft.address;
@@ -177,7 +188,7 @@ describe("AdpVote", function () {
               shareCount, // topWinner No
               endDate,
               [1, 2, 3], // tokenIds,
-              percentage
+              percentage, dispensable
             );
             runningCampaign = await adpVoteContract.campaigns(nftAddress);
         });
@@ -209,7 +220,7 @@ describe("AdpVote", function () {
           shareCount, // topWinner No
           endDate,
           [1, 2, 3], // tokenIds
-          percentage
+          percentage, dispensable
         );
         
         await erc20.connect(deployedUser).approve(adpVoteContract.address, prizePool);
@@ -221,7 +232,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds,
-            percentage
+            percentage, dispensable
           )).to.be.revertedWith("Campaign is still running.");
 
       });
@@ -245,7 +256,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds,
-            percentage
+            percentage, dispensable
           );
   
           await erc20.connect(deployedUser).approve(adpVoteContract.address, _editPrizeAmount);
@@ -280,7 +291,7 @@ describe("AdpVote", function () {
           shareCount, // topWinner No
           endDate,
           [1, 2, 3], // tokenIds
-          percentage
+          percentage, dispensable
         );
       });
 
@@ -345,7 +356,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds
-            percentage
+            percentage, dispensable
           ); 
       });
 
@@ -389,7 +400,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds,
-            percentage
+            percentage, dispensable
         );
 
         await erc20.connect(user2).approve(adpVoteContract.address, 1);
@@ -411,7 +422,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds,
-            percentage
+            percentage, dispensable
         );
 
         const nonExistingNft = 0;
@@ -431,10 +442,10 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds,
-            percentage
+            percentage, dispensable
         );
-
-        await expect(adpVoteContract.connect(user1).vote(nft.address, 1)).to.be.revertedWith(
+          // user1
+        await expect(adpVoteContract.connect(deployedUser).vote(nft.address, 1)).to.be.revertedWith(
           "You cannot vote your own."
         );
       });
@@ -450,7 +461,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds,
-            percentage
+            percentage, dispensable
         );
 
         await erc20.connect(user2).approve(adpVoteContract.address, amountInWei("1001"));
@@ -474,7 +485,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 2, 3], // tokenIds,
-            percentage
+            percentage, dispensable
           );
         });
 
@@ -586,7 +597,7 @@ describe("AdpVote", function () {
             shareCount, // topWinner No
             endDate,
             [1, 4], // tokenIds,
-            percentage
+            percentage, dispensable
           );
   
           await erc20.connect(user3).approve(adpVoteContract.address, votingFee);
@@ -600,6 +611,9 @@ describe("AdpVote", function () {
           await adpVoteContract.connect(user6).vote(nft.address, 4);
           await erc20.connect(user7).approve(adpVoteContract.address, votingFee);
           await adpVoteContract.connect(user7).vote(nft.address, 4);
+
+          await nft.connect(deployedUser).setApprovalForAll(adpVoteContract.address, true);
+          await adpVoteContract.connect(deployedUser).tranferToContestants(nft.address, _tokenIds, _addresses);
 
       });
  
@@ -641,10 +655,11 @@ describe("AdpVote", function () {
             votingFee,
             toggleVote, // toggleVote
             prizePool, 
-            2, //shareCount, // topWinner No
+            2, //topWinner No
             endDate,
             [1, 2, 4, 7], // tokenIds
-            0
+            0,
+            dispensable
           );
 
           await erc20.connect(user4).approve(adpVoteContract.address, votingFee);
@@ -660,10 +675,13 @@ describe("AdpVote", function () {
           await adpVoteContract.connect(user7).vote(nft.address, 4);
           
           await erc20.connect(user4).approve(adpVoteContract.address, votingFee);
-          await adpVoteContract.connect(user4).vote(nft.address, 7);          
+          await adpVoteContract.connect(user4).vote(nft.address, 7);
   
           await erc20.connect(user3).approve(adpVoteContract.address, votingFee);
           await adpVoteContract.connect(user3).vote(nft.address, 1);
+
+          await nft.connect(deployedUser).setApprovalForAll(adpVoteContract.address, true);
+          await adpVoteContract.connect(deployedUser).tranferToContestants(nft.address, _tokenIds, _addresses);
       });
       /*
       * Prize is 100 USDT. Top 2 winners will be chosen.
@@ -683,13 +701,9 @@ describe("AdpVote", function () {
       * So after dispensing prizes, user2 will receive 50 USDT from prize awarded
       */
       it("Should accept if user2 balance is 1050000000 after dispensing.", async function () {
-        await network.provider.send("evm_increaseTime", [endDate + 1]);
-        const sssss = await erc20.connect(user2).balanceOf(user2.address);
-        console.log(sssss, amountInWei("1050"));
-
+          await network.provider.send("evm_increaseTime", [endDate + 1]);
           await adpVoteContract.connect(deployedUser).dispensePrize(nft.address);
           const user2BalAfterDispensing = await erc20.connect(user2).balanceOf(user2.address);
-          console.log(user2BalAfterDispensing, amountInWei("1050"));
           expect(user2BalAfterDispensing).to.equal( amountInWei("1050") );
       });
 
@@ -762,20 +776,8 @@ describe("AdpVote", function () {
         await network.provider.send("evm_increaseTime", [endDate + 1]);
         await adpVoteContract.connect(deployedUser).dispensePrize(nft.address);
         const user3BalAfterDispensing = parseInt( await erc20.connect(deployedUser).balanceOf(user3.address) );
-
         
-        const _finales = await adpVoteContract.connect(deployedUser).getWinnersAndVoters(nft.address);
-        console.log("_winenr", _finales[0]);
-        console.log("user1.address", user1.address);
-        console.log("user2.address", user2.address);
-        console.log("--------------------------------");
-
-        console.log("_voters", _finales[1]);
-        console.log("user4.address", user4.address);
-        console.log("user5.address", user5.address);
-        console.log("user6.address", user6.address);
-        console.log("user7.address", user7.address);
-        console.log("--------------------------------");
+        // const _finales = await adpVoteContract.connect(deployedUser).getWinnersAndVoters(nft.address);
 
         expect(user3BalAfterDispensing).to.equal( amountInWei("999") );
       });
