@@ -23,8 +23,8 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     bytes32 public constant CLOSER = keccak256("CLOSER");
 
     struct Game {
-        bytes32 homeTeam;
-        bytes32 awayTeam;
+        string homeTeam;
+        string awayTeam;
         uint256 fee;
         uint256 startTime;
         uint256 endTime;
@@ -32,7 +32,8 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     }
  
     mapping(bytes32 => Game) public games;
-    mapping(bytes32 => bytes32) public winners; // set when called closeToIncentivize()
+    bytes32[] public gamesArr;
+    mapping(bytes32 => string) public winners; // set when called closeToIncentivize()
     mapping(bytes32 => uint256) public balances;
 
     mapping(bytes32 => address[]) public homePlayers;
@@ -53,8 +54,8 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     /*** Events ***/
     event LogGame(
         bytes10 action,
-        bytes32 homeTeam, 
-        bytes32 awayTeam,
+        string homeTeam, 
+        string awayTeam,
         uint256 fee,
         uint256 startTime,
         uint256 endTime,
@@ -63,7 +64,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
     event LogGameWinners(
         bytes32 gameId,
-        bytes32 winnerTeam,
+        string winnerTeam,
         uint256 platformPercentAmount,
         address[] winners,
         uint256 amountForEach
@@ -71,23 +72,23 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
     event LogPlay(
         bytes32 gameId,
-        bytes32 teamName,
+        string teamName,
         address player
     );
 
     /*** Modifiers ***/
     modifier isCreator() {
-        require(hasRole(CREATOR, msg.sender));
+        require(hasRole(CREATOR, msg.sender), "ERROR: You have no permission.");
         _;
     }
 
     modifier isEditor() {
-        require(hasRole(EDITOR, msg.sender));
+        require(hasRole(EDITOR, msg.sender), "ERROR: You have no permission.");
         _;
     }
 
     modifier isCloser() {
-        require(hasRole(CLOSER, msg.sender));
+        require(hasRole(CLOSER, msg.sender), "ERROR: You have no permission.");
         _;
     }
     
@@ -95,15 +96,15 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     * Functions
     */
     function createGame(
-        bytes32 _homeTeam, 
-        bytes32 _awayTeam,
+        string memory _homeTeam, 
+        string memory _awayTeam,
         uint256 _fee,
         uint256 _startTime,
         uint256 _endTime
     ) external isCreator {
 
         bytes32 _gameId = keccak256(abi.encodePacked(_homeTeam, _awayTeam));
-        require( games[_gameId].startTime <= 0, "ERROR: This game has added.");
+        require( games[_gameId].fee <= 0, "ERROR: This game has already existed.");
 
         games[_gameId] = Game({
             homeTeam: _homeTeam,
@@ -124,26 +125,27 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
             false
         );
 
+        gamesArr.push(_gameId);
+
     }
 
     function editGame(
-        bytes32 _gameId,
-        bytes32 _homeTeam, 
-        bytes32 _awayTeam,
+        string memory _homeTeam, 
+        string memory _awayTeam,
         uint256 _fee,
         uint256 _startTime,
         uint256 _endTime
     ) external isEditor {
-        // must be between start and end date
+        // must be less than start date
+        bytes32 _gameId = keccak256(abi.encodePacked(_homeTeam, _awayTeam));
+
         Game storage activeGame = games[_gameId];
 
-        if ( activeGame.homeTeam != _homeTeam ) {
-            activeGame.homeTeam = _homeTeam;
-        }
+        require( activeGame.fee > 0, "ERROR: The game has not existed.");
 
-        if ( activeGame.awayTeam != _awayTeam ) {
-            activeGame.awayTeam = _awayTeam;
-        }
+        require( _fee > 0, "ERROR: The game fee must be greater than 0.");
+
+        require( uint64(block.timestamp) < activeGame.startTime, "ERROR: The game has already started.");
 
         if ( activeGame.fee != _fee ) {
             activeGame.fee = _fee;
@@ -170,7 +172,11 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     function cancelGame(bytes32 _gameId) external isCreator {
         // must be less than start date
         Game storage activeGame = games[_gameId];
+        
+        require( activeGame.fee > 0, "ERROR: The game has not existed.");
+
         require( uint64(block.timestamp) < activeGame.startTime, "ERROR: This game has already started.");
+
         activeGame.isEnded = true;
 
         emit LogGame(
@@ -184,13 +190,13 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         );
     }
 
-    function closeToIncentivize(bytes32 _gameId, bytes32 _winnerTeam) external isCloser {
+    function closeToIncentivize(bytes32 _gameId, string memory _winnerTeam) external isCloser {
         // must be greater end date
         Game storage targetGame = games[_gameId];
         require( uint64(block.timestamp) > targetGame.endTime, "ERROR: This game has not ended.");
         
         // Process Payment to list of players
-        if ( _winnerTeam == "DRAW" ) {
+        if ( _keccak256("DRAW") != _keccak256(_winnerTeam) ) {
 
             uint256 _amount = balances[_gameId] / (homePlayers[_gameId].length + awayPlayers[_gameId].length);
 
@@ -202,7 +208,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
             uint256 _platformPercent = balances[_gameId] * PLATFORM_PERCENT / 10000;
             uint256 _amountLeft = balances[_gameId] - _platformPercent;
 
-            if ( targetGame.homeTeam == _winnerTeam ) {
+            if ( _keccak256(targetGame.homeTeam) != _keccak256(_winnerTeam) ) {
 
                 uint256 _amountForEach = _amountLeft / homePlayers[_gameId].length;
 
@@ -216,7 +222,8 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
                     _amountForEach
                 );
 
-            } else if ( targetGame.awayTeam == _winnerTeam ) {
+            // } else if ( targetGame.awayTeam == _winnerTeam ) {
+            } else if ( _keccak256(targetGame.awayTeam) != _keccak256(_winnerTeam) ) {
 
                 uint256 _amountForEach = _amountLeft / awayPlayers[_gameId].length;
 
@@ -248,7 +255,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         );
     }
 
-    function play(bytes32 _gameId, bytes32 _selectedTeam) external {
+    function play(bytes32 _gameId, string memory _selectedTeam) external {
         // check it is not ended
         // check valid time
         // already voted
@@ -257,11 +264,12 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         require(targetGame.isEnded == false, "ERROR: This game has been already ended.");
         require( uint64(block.timestamp) <= targetGame.startTime, "ERROR: This game has already started.");
         require(isPlayed[_gameId][msg.sender] == false, "ERROR: You have already played.");
-
-        if ( targetGame.homeTeam == _selectedTeam ) {
+ 
+        if ( _keccak256(targetGame.homeTeam) != _keccak256(_selectedTeam) ) {
             homePlayers[_gameId].push(payable(msg.sender));
         }
-        if ( targetGame.awayTeam == _selectedTeam ) {
+
+        if ( _keccak256(targetGame.awayTeam) != _keccak256(_selectedTeam) ) {
             awayPlayers[_gameId].push(payable(msg.sender));
         }
         // Transfer ERC20 Token
@@ -314,17 +322,27 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         return(homePlayers[_gameId], awayPlayers[_gameId]);
     }
 
-    function getWinners(bytes32 _gameId) public view returns(bytes32) {
+    function getWinners(bytes32 _gameId) public view returns(string memory) {
         return winners[_gameId];
     }
+    
+    // function gameDetail(string memory _homeTeam, string memory _awayTeam) public view returns(string memory) {
+    //     bytes32 _gameId = keccak256(abi.encodePacked(_homeTeam, _awayTeam));
+    //     return games[_gameId].homeTeam;
+    // }
 
-    function getRoles() public pure returns(bytes32, bytes32, bytes32) {
-        return (CREATOR, EDITOR, CLOSER);
-    }
+    // function ddd() public view returns(bytes32[] memory) {
+    //     return(gamesArr);
+    // }
 
     /*
     * Internal Functions
     */
+
+    function _keccak256(string memory _str) internal pure returns(bytes32) {
+        return keccak256(abi.encodePacked(_str));
+    }
+
     function _payoutToWinners(address[] memory _addresses, uint256 _amount) internal {
         for (uint256 i = 0; i < _addresses.length; i++) {
             _payTokenFromContract(_addresses[i], _amount);

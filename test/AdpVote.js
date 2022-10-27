@@ -10,16 +10,13 @@ const BN = require('bn.js');
 // Enable and inject BN dependency
 chai.use(require('chai-bn')(BN));
 
-const amountInWei = (_amount) => {
-  const _val = ethers.utils.parseUnits(_amount, 6);
-  return parseInt(_val);
-};
+const amountInWei = (_amount) => parseInt( ethers.utils.parseUnits(_amount, 6) );
 
-const votingFee = amountInWei("1");
-const prizePool = amountInWei("100");
-const endDate = 2221;
-const shareCount = 5;
-const toggleVote = true;
+const _fee = amountInWei("1");
+const _start = 1000;
+const _end = 3000;
+const _home = "MANU";
+const _away = "CHELSEA";
 const _userTokenBalance = 1000; // for minting, no need to convert to WEI
 const _platformPercent = 150; // 1.5%
 
@@ -114,6 +111,79 @@ describe("Soccer Betting", function () {
         ).to.be.revertedWith("Ownable: caller is not the owner");
 
       });
+  
+    });
+
+    describe("Create Game", function () {
+
+      it("Should reject if a user has no creator permission", async function () {
+
+        await expect(
+          SoccerContract.connect(user1).createGame(_home, _away, _fee, _start, _end)
+        ).to.be.revertedWith("ERROR: You have no permission.");
+
+      });
+
+      it("Should reject if a game is alraedy added.", async function () {
+
+        await  SoccerContract.connect(deployedUser).createGame(_home, _away, _fee, _start, _end);
+
+        await expect(
+          SoccerContract.connect(deployedUser).createGame(_home, _away, _fee, _start, _end)
+        ).to.be.revertedWith("ERROR: This game has already existed.");
+
+      });
+
+      it("Should accept if game is successfully created.", async function () {        
+         await SoccerContract.connect(deployedUser).createGame(_home, _away, _fee, _start, _end);
+      });
+  
+    });
+
+    describe("Edit Game", function () {
+
+      it("Should reject if a user has no editor permission", async function () {
+
+        await expect(
+          SoccerContract.connect(user1).editGame(_home, _away, _fee, _start, _end)
+        ).to.be.revertedWith("ERROR: You have no permission.");
+
+      });
+
+      it("Should reject if a game does not exist and has started.", async function () {
+
+        await SoccerContract.connect(deployedUser).createGame(_home, _away, _fee, _start, _end);
+        
+        await network.provider.send("evm_increaseTime", [_start + 0]);
+
+        await expect(
+          SoccerContract.connect(deployedUser).editGame(_home, "NONEXISTED"+ _away, _fee, _start, _end)
+        ).to.be.revertedWith("ERROR: The game has not existed.");
+
+        await expect(
+          SoccerContract.connect(deployedUser).editGame(_home, _away, 0, _start, _end)
+        ).to.be.revertedWith("ERROR: The game fee must be greater than 0.");
+
+        await expect(
+          SoccerContract.connect(deployedUser).editGame(_home, _away, _fee, _start, _end)
+        ).to.be.revertedWith("ERROR: The game has already started.");
+
+      });
+    /*
+      it("Should reject if a game is alraedy added.", async function () {
+
+        await  SoccerContract.connect(deployedUser).createGame(_home, _away, _fee, _start, _end);
+
+        await expect(
+          SoccerContract.connect(deployedUser).createGame(_home, _away, _fee, _start, _end)
+        ).to.be.revertedWith("ERROR: This game has already existed.");
+
+      });
+
+      it("Should accept if game is successfully created.", async function () {        
+         await SoccerContract.connect(deployedUser).createGame(_home, _away, _fee, _start, _end);
+      });
+      */
   
     });
  
