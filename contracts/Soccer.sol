@@ -8,15 +8,15 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
 
 // Uncomment this line to use console.log
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
     string public name;
 
     address public ERC20_CONTRACT_ADDRESS;
-    uint256 public PLATFORM_PERCENT;
     address public COMMISSION_RECIPIENT;
+    uint256 public PLATFORM_PERCENT;
 
     bytes32 public constant CREATOR = keccak256("CREATOR");
     bytes32 public constant EDITOR = keccak256("EDITOR");
@@ -31,14 +31,13 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         bool isEnded;
     }
  
-    mapping(bytes32 => Game) public games;
-    bytes32[] public gamesArr;
-    mapping(bytes32 => string) public winners; // set when called closeToIncentivize()
-    mapping(bytes32 => uint256) public balances;
+    mapping(uint256 => Game) public games;
+    mapping(uint256 => uint256) public balances;
+    mapping(uint256 => string) public winners; // set when called closeToIncentivize()
 
-    mapping(bytes32 => address[]) public homePlayers;
-    mapping(bytes32 => address[]) public awayPlayers;
-    mapping(bytes32 => mapping(address => bool)) public isPlayed;
+    mapping(uint256 => address[]) public homePlayers;
+    mapping(uint256 => address[]) public awayPlayers;
+    mapping(uint256 => mapping(address => bool)) public isPlayed;
 
     function initialize() public initializer {
 
@@ -54,6 +53,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     /*** Events ***/
     event LogGame(
         bytes10 action,
+        uint256 gameId,
         string homeTeam, 
         string awayTeam,
         uint256 fee,
@@ -63,7 +63,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     );
 
     event LogGameWinners(
-        bytes32 gameId,
+        uint256 gameId,
         string winnerTeam,
         uint256 platformPercentAmount,
         address[] winners,
@@ -71,7 +71,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     );
 
     event LogPlay(
-        bytes32 gameId,
+        uint256 gameId,
         string teamName,
         address player
     );
@@ -96,6 +96,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     * Functions
     */
     function createGame(
+        uint256 _gameId,
         string memory _homeTeam, 
         string memory _awayTeam,
         uint256 _fee,
@@ -103,41 +104,39 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         uint256 _endTime
     ) external isCreator {
 
-        bytes32 _gameId = keccak256(abi.encodePacked(_homeTeam, _awayTeam));
         require( games[_gameId].fee <= 0, "ERROR: This game has already existed.");
+        
+        uint256 _currentTime = uint64(block.timestamp);
 
         games[_gameId] = Game({
             homeTeam: _homeTeam,
             awayTeam: _awayTeam,
             fee: _fee,
-            startTime: _startTime,
-            endTime: _endTime,
+            startTime: _currentTime + _startTime,
+            endTime: _currentTime + _endTime,
             isEnded: false
         });
 
         emit LogGame(
             "ADD", 
+            _gameId,
             _homeTeam, 
             _awayTeam, 
             _fee, 
-            _startTime, 
-            _endTime, 
+            _currentTime + _startTime, 
+            _currentTime + _endTime, 
             false
         );
-
-        gamesArr.push(_gameId);
-
     }
 
     function editGame(
+        uint256 _gameId,
         string memory _homeTeam, 
         string memory _awayTeam,
         uint256 _fee,
         uint256 _startTime,
         uint256 _endTime
     ) external isEditor {
-        // must be less than start date
-        bytes32 _gameId = keccak256(abi.encodePacked(_homeTeam, _awayTeam));
 
         Game storage activeGame = games[_gameId];
 
@@ -145,42 +144,54 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
         require( _fee > 0, "ERROR: The game fee must be greater than 0.");
 
-        require( uint64(block.timestamp) < activeGame.startTime, "ERROR: The game has already started.");
+        uint256 _currentTime = uint64(block.timestamp);
+
+        require( _currentTime < activeGame.startTime, "ERROR: The game has already started.");
+
+        if ( _keccak256(activeGame.homeTeam) != _keccak256(_homeTeam) ) {
+            activeGame.homeTeam = _homeTeam;
+        }
+
+        if ( _keccak256(activeGame.awayTeam) != _keccak256(_awayTeam) ) {
+            activeGame.awayTeam = _awayTeam;
+        }
 
         if ( activeGame.fee != _fee ) {
             activeGame.fee = _fee;
         }
 
         if ( activeGame.startTime != _startTime ) {
-            activeGame.startTime = _startTime;
+            activeGame.startTime = _currentTime + _startTime;
         }
 
         if ( activeGame.endTime != _endTime ) {
-            activeGame.endTime = _endTime;
+            activeGame.endTime = _currentTime + _endTime;
         }
         emit LogGame(
             "EDIT", 
+            _gameId,
             _homeTeam, 
             _awayTeam, 
             _fee, 
-            _startTime, 
-            _endTime, 
+            activeGame.startTime, 
+            activeGame.endTime, 
             activeGame.isEnded
         );
     }
  
-    function cancelGame(bytes32 _gameId) external isCreator {
+    function cancelGame(uint256 _gameId) external isCreator {
         // must be less than start date
         Game storage activeGame = games[_gameId];
         
         require( activeGame.fee > 0, "ERROR: The game has not existed.");
 
-        require( uint64(block.timestamp) < activeGame.startTime, "ERROR: This game has already started.");
+        require( uint64(block.timestamp) < activeGame.startTime, "ERROR: The game has already started.");
 
         activeGame.isEnded = true;
 
         emit LogGame(
-            "CANCEL", 
+            "CANCEL",
+            _gameId,
             activeGame.homeTeam, 
             activeGame.awayTeam, 
             activeGame.fee, 
@@ -190,89 +201,31 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         );
     }
 
-    function closeToIncentivize(bytes32 _gameId, string memory _winnerTeam) external isCloser {
-        // must be greater end date
+    function play(uint256 _gameId, string memory _selectedTeam) external {
+
         Game storage targetGame = games[_gameId];
-        require( uint64(block.timestamp) > targetGame.endTime, "ERROR: This game has not ended.");
-        
-        // Process Payment to list of players
-        if ( _keccak256("DRAW") != _keccak256(_winnerTeam) ) {
 
-            uint256 _amount = balances[_gameId] / (homePlayers[_gameId].length + awayPlayers[_gameId].length);
+        uint64 _currentTime = uint64(block.timestamp);
 
-            _payoutToWinners(homePlayers[_gameId], _amount);
-
-            _payoutToWinners(awayPlayers[_gameId], _amount);
-
-        } else {
-            uint256 _platformPercent = balances[_gameId] * PLATFORM_PERCENT / 10000;
-            uint256 _amountLeft = balances[_gameId] - _platformPercent;
-
-            if ( _keccak256(targetGame.homeTeam) != _keccak256(_winnerTeam) ) {
-
-                uint256 _amountForEach = _amountLeft / homePlayers[_gameId].length;
-
-                _payoutToWinners(homePlayers[_gameId], _amountForEach);
-                
-                emit LogGameWinners(
-                    _gameId, 
-                    _winnerTeam,
-                    PLATFORM_PERCENT, 
-                    homePlayers[_gameId], 
-                    _amountForEach
-                );
-
-            // } else if ( targetGame.awayTeam == _winnerTeam ) {
-            } else if ( _keccak256(targetGame.awayTeam) != _keccak256(_winnerTeam) ) {
-
-                uint256 _amountForEach = _amountLeft / awayPlayers[_gameId].length;
-
-                _payoutToWinners(awayPlayers[_gameId], _amountForEach);
-
-                emit LogGameWinners(
-                    _gameId, 
-                    _winnerTeam, 
-                    PLATFORM_PERCENT, 
-                    awayPlayers[_gameId], 
-                    _amountForEach
-                );
-            }
-
-            _payTokenFromContract(COMMISSION_RECIPIENT, _platformPercent);
-        }
-
-        winners[_gameId] = _winnerTeam;
-        targetGame.isEnded = true;
-
-         emit LogGame(
-            "CLOSE", 
-            targetGame.homeTeam, 
-            targetGame.awayTeam, 
-            targetGame.fee, 
-            targetGame.startTime, 
-            targetGame.endTime, 
-            true
+        require(
+            IERC20Upgradeable(ERC20_CONTRACT_ADDRESS).balanceOf(msg.sender) >= targetGame.fee, 
+            "ERROR: Insufficient balance."
         );
-    }
 
-    function play(bytes32 _gameId, string memory _selectedTeam) external {
-        // check it is not ended
-        // check valid time
-        // already voted
-        Game storage targetGame = games[_gameId];
+        require( _currentTime > targetGame.startTime, "ERROR: The game has not started yet.");
 
-        require(targetGame.isEnded == false, "ERROR: This game has been already ended.");
-        require( uint64(block.timestamp) <= targetGame.startTime, "ERROR: This game has already started.");
+        require( _currentTime < targetGame.endTime, "ERROR: The game has been ended.");
+
         require(isPlayed[_gameId][msg.sender] == false, "ERROR: You have already played.");
  
-        if ( _keccak256(targetGame.homeTeam) != _keccak256(_selectedTeam) ) {
+        if ( _keccak256(targetGame.homeTeam) == _keccak256(_selectedTeam) ) {
             homePlayers[_gameId].push(payable(msg.sender));
         }
 
-        if ( _keccak256(targetGame.awayTeam) != _keccak256(_selectedTeam) ) {
+        if ( _keccak256(targetGame.awayTeam) == _keccak256(_selectedTeam) ) {
             awayPlayers[_gameId].push(payable(msg.sender));
         }
-        // Transfer ERC20 Token
+        // Lock ERC20 Token in contract
         if ( targetGame.fee > 0 ) {
             _payTokenFromAcc(msg.sender, address(this), targetGame.fee);
         }
@@ -281,6 +234,78 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         balances[_gameId] += targetGame.fee;
         
         emit LogPlay(_gameId, _selectedTeam, msg.sender);
+    }
+
+    function payout(uint256 _gameId, string memory _winnerTeam) external isCloser {
+
+        Game storage targetGame = games[_gameId];
+
+        require( targetGame.fee > 0, "ERROR: This game has not existed.");
+
+        uint256 _gameBalance = balances[_gameId];
+        
+        // Process Payment to list of players
+        if ( _keccak256("DRAW") == _keccak256(_winnerTeam) ) {
+
+            address[] memory _homePlayers = homePlayers[_gameId];
+            address[] memory _awayPlayers = awayPlayers[_gameId];
+
+            uint256 _amount = _gameBalance / (_homePlayers.length + _awayPlayers.length);
+
+            _payoutToWinners(_homePlayers, _amount);
+            _payoutToWinners(_awayPlayers, _amount);
+
+        } else {
+            
+            uint256 _platformPercent = _gameBalance * PLATFORM_PERCENT / 10000;
+            uint256 _totalAmountForWinners = _gameBalance - _platformPercent;
+
+            console.log("_gameBalance %s", _gameBalance);
+            console.log("_platformPercent %s", _platformPercent);
+            console.log("_totalAmountForWinners %s", _totalAmountForWinners);
+
+            if ( _keccak256(targetGame.homeTeam) == _keccak256(_winnerTeam) ) {
+
+                address[] memory _homePlayers = homePlayers[_gameId];
+
+                uint256 _share = _totalAmountForWinners / _homePlayers.length;
+
+                _payoutToWinners(_homePlayers, _share);
+                
+                emit LogGameWinners(
+                    _gameId, _winnerTeam, PLATFORM_PERCENT, _homePlayers, _share
+                );
+
+            } else if ( _keccak256(targetGame.awayTeam) == _keccak256(_winnerTeam) ) {
+
+                address[] memory _awayPlayers = awayPlayers[_gameId];
+
+                uint256 _share = _totalAmountForWinners / _awayPlayers.length;
+
+                _payoutToWinners(_awayPlayers, _share);
+
+                emit LogGameWinners(
+                    _gameId, _winnerTeam, PLATFORM_PERCENT, _awayPlayers, _share
+                );
+            }
+            // Platform Percentage
+            _payTokenFromContract(COMMISSION_RECIPIENT, _platformPercent);
+        }
+
+        winners[_gameId] = _winnerTeam;
+        balances[_gameId] = balances[_gameId] - _gameBalance;
+        targetGame.isEnded = true;
+
+         emit LogGame(
+            "CLOSE",
+            _gameId,
+            targetGame.homeTeam, 
+            targetGame.awayTeam, 
+            targetGame.fee, 
+            targetGame.startTime, 
+            targetGame.endTime, 
+            true
+        );
     }
 
     function grantUserRoles(uint8[] memory _roleIds, address _address) external onlyOwner {
@@ -318,23 +343,17 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         _payTokenFromContract(_receiver, _amount);
     }
 
-    function getPlayers(bytes32 _gameId) public view returns(address[] memory, address[] memory) {
+    function getPlayers(uint256 _gameId) public view returns(address[] memory, address[] memory) {
         return(homePlayers[_gameId], awayPlayers[_gameId]);
     }
 
-    function getWinners(bytes32 _gameId) public view returns(string memory) {
+    function getWinners(uint256 _gameId) public view returns(string memory) {
         return winners[_gameId];
     }
     
-    // function gameDetail(string memory _homeTeam, string memory _awayTeam) public view returns(string memory) {
-    //     bytes32 _gameId = keccak256(abi.encodePacked(_homeTeam, _awayTeam));
+    // function gameDetail(uint256 _gameId) public view returns(string memory) {
     //     return games[_gameId].homeTeam;
     // }
-
-    // function ddd() public view returns(bytes32[] memory) {
-    //     return(gamesArr);
-    // }
-
     /*
     * Internal Functions
     */
