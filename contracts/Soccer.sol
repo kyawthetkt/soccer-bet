@@ -205,6 +205,8 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     function play(uint256 _gameId, string memory _selectedTeam) external {
 
         Game storage targetGame = games[_gameId];
+        
+        require(isPlayed[_gameId][msg.sender] == false, "ERROR: You have already played.");
 
         uint64 _currentTime = uint64(block.timestamp);
 
@@ -217,7 +219,6 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
         require( _currentTime < targetGame.endTime, "ERROR: The game has been ended.");
 
-        require(isPlayed[_gameId][msg.sender] == false, "ERROR: You have already played.");
  
         if ( _keccak256(targetGame.homeTeam) == _keccak256(_selectedTeam) ) {
             homePlayers[_gameId].push(payable(msg.sender));
