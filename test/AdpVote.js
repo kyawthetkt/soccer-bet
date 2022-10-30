@@ -5,10 +5,6 @@ const {
 const { expect } = require("chai");
 const { ethers, upgrades } = require('hardhat');
 const chai = require('chai');
-const BN = require('bn.js');
-
-// Enable and inject BN dependency
-chai.use(require('chai-bn')(BN));
 
 const amountInWei = (_amount) => parseInt( ethers.utils.parseUnits(_amount, 6) );
 
@@ -433,38 +429,69 @@ describe("Soccer Betting", function () {
 
       });
 
-      it("Should accept if home team' siders won.", async function () {
-        const sss = parseInt(await erc20.connect(deployedUser).balanceOf(deployedUser.address));
-        console.log("sss:", sss);
+      it("Should accept if home team won and percent receiver received 2% amount.", async function () {
         
         await SoccerContract.connect(deployedUser).payout(_gameId, "MANU");
-
-        // check platform percentage
         const _percentageReceiver = parseInt(await erc20.connect(deployedUser).balanceOf(deployedUser.address));
-        console.log("ttt:", _percentageReceiver);
-        // winner's balance
-
-        /*
-        const _user1Balance = parseInt(await erc20.connect(user1).balanceOf(user1.address));
-        const _user2Balance = parseInt(await erc20.connect(user1).balanceOf(user2.address));
-        const _user3Balance = parseInt(await erc20.connect(user1).balanceOf(user3.address));
-        const _user4Balance = parseInt(await erc20.connect(user1).balanceOf(user4.address));
-        const _user5Balance = parseInt(await erc20.connect(user1).balanceOf(user5.address));
-        const _user6Balance = parseInt(await erc20.connect(user1).balanceOf(user6.address));
-        const _user7Balance = parseInt(await erc20.connect(user1).balanceOf(user7.address));
-        
-        expect(parseInt(_user1Balance) ).to.be.equal( amountInWei(_userTokenBalance.toString()) );
-        expect(parseInt(_user2Balance) ).to.be.equal( amountInWei(_userTokenBalance.toString()) );
-        expect(parseInt(_user3Balance) ).to.be.equal( amountInWei(_userTokenBalance.toString()) );
-        expect(parseInt(_user4Balance) ).to.be.equal( amountInWei(_userTokenBalance.toString()) );
-        expect(parseInt(_user5Balance) ).to.be.equal( amountInWei(_userTokenBalance.toString()) );
-        expect(parseInt(_user6Balance) ).to.be.equal( amountInWei(_userTokenBalance.toString()) );
-        expect(parseInt(_user7Balance) ).to.be.equal( amountInWei(_userTokenBalance.toString()) );
-        */
-
+        expect(parseInt(_percentageReceiver) ).to.be.equal(amountInWei("0.06"));
 
       });
 
+      it("Should accept if home team won and home team's sider receive.", async function () {
+
+        await SoccerContract.connect(deployedUser).payout(_gameId, "MANU");
+        const _user1Balance = parseInt(await erc20.connect(user1).balanceOf(user1.address));
+        const _user7Balance = parseInt(await erc20.connect(user7).balanceOf(user7.address));
+        expect( parseInt(_user1Balance) ).to.be.equal(999420000);
+        expect( parseInt(_user7Balance) ).to.be.equal(999420000);
+
+      });
+
+      it("Should accept if away team won and percent receiver received 2% amount.", async function () {
+        
+        await SoccerContract.connect(deployedUser).payout(_gameId, "CHELSEA");
+        const _percentageReceiver = parseInt(await erc20.connect(deployedUser).balanceOf(deployedUser.address));
+        expect(parseInt(_percentageReceiver) ).to.be.equal(amountInWei("0.14"));
+
+      });
+
+      it("Should accept if away team won and away team's sider receive.", async function () {
+
+        await SoccerContract.connect(deployedUser).payout(_gameId, "CHELSEA");
+        const _user8Balance = parseInt(await erc20.connect(user8).balanceOf(user8.address));
+        const _user10Balance = parseInt(await erc20.connect(user10).balanceOf(user10.address));
+
+        expect( parseInt(_user8Balance) ).to.be.equal(1001286666);
+        expect( parseInt(_user10Balance) ).to.be.equal(1001286666);
+
+      });
+
+      it("Should reject if the winner is neither DRAW nor any of the teams played.", async function () {
+
+        await expect(
+          SoccerContract.connect(deployedUser).payout(_gameId, "NONTEAM")
+        ).to.be.revertedWith("ERROR: The game is not on draw or incorrect team chosen.");
+
+      });
+
+    });
+
+    describe("Game Detail", function () {
+
+      beforeEach(async function () {
+        await SoccerContract.connect(deployedUser).createGame(_gameId, _home, _away, _fee, _start, _end);
+      });
+
+      it("Should accept if the game detail are correctly returned.", async function () {
+
+        const _gameDetail = await SoccerContract.connect(deployedUser).game(_gameId);
+        expect(_gameDetail[0]).to.equal(_home);
+        expect(_gameDetail[1]).to.equal(_away);
+        expect( parseInt(_gameDetail[2]) ).to.equal(_fee);
+        expect(_gameDetail[5]).to.be.false;
+
+      });
+ 
     });
     
  

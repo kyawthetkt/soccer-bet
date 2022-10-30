@@ -18,6 +18,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     address public COMMISSION_RECIPIENT;
     uint256 public PLATFORM_PERCENT;
 
+    bytes32 public constant GAME_ON_DRAW = keccak256("DRAW");
     bytes32 public constant CREATOR = keccak256("CREATOR");
     bytes32 public constant EDITOR = keccak256("EDITOR");
     bytes32 public constant CLOSER = keccak256("CLOSER");
@@ -240,53 +241,51 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
         Game storage targetGame = games[_gameId];
 
-        require( targetGame.fee > 0, "ERROR: This game has not existed.");
+        bytes32 _tempWinnerTeam = _keccak256(_winnerTeam);
+        bytes32 _tempHomeTeam = _keccak256(targetGame.homeTeam);
+        bytes32 _tempAwayTeam = _keccak256(targetGame.awayTeam);
 
-        uint256 _gameBalance = balances[_gameId];
+        require( targetGame.fee > 0, "ERROR: This game has not existed.");
+        require( 
+            _tempWinnerTeam == GAME_ON_DRAW || _tempWinnerTeam == _tempHomeTeam || _tempWinnerTeam == _tempAwayTeam, 
+            "ERROR: The game is not on draw or incorrect team chosen."
+        );
         
-        // Process Payment to list of players
-        if ( _keccak256("DRAW") == _keccak256(_winnerTeam) ) {
+        uint256 _gameBalance;
+
+        if ( GAME_ON_DRAW == _tempWinnerTeam ) {
 
             address[] memory _homePlayers = homePlayers[_gameId];
             address[] memory _awayPlayers = awayPlayers[_gameId];
-
+            _gameBalance = balances[_gameId];
             uint256 _amount = _gameBalance / (_homePlayers.length + _awayPlayers.length);
 
             _payoutToWinners(_homePlayers, _amount);
             _payoutToWinners(_awayPlayers, _amount);
 
         } else {
-            
-            uint256 _platformPercent = _gameBalance * PLATFORM_PERCENT / 10000;
-            uint256 _totalAmountForWinners = _gameBalance - _platformPercent;
 
-            console.log("_gameBalance %s", _gameBalance);
-            console.log("_platformPercent %s", _platformPercent);
-            console.log("_totalAmountForWinners %s", _totalAmountForWinners);
+            address[] memory _homePlayers = homePlayers[_gameId];
+            address[] memory _awayPlayers = awayPlayers[_gameId];
+            uint256 _platformPercent;
 
-            if ( _keccak256(targetGame.homeTeam) == _keccak256(_winnerTeam) ) {
+            if ( _tempHomeTeam == _tempWinnerTeam ) {                
 
-                address[] memory _homePlayers = homePlayers[_gameId];
+                _gameBalance = targetGame.fee * _awayPlayers.length;
+                _platformPercent = _gameBalance * PLATFORM_PERCENT / 10000;
+                uint256 _share = (_gameBalance - _platformPercent) / _homePlayers.length;
 
-                uint256 _share = _totalAmountForWinners / _homePlayers.length;
+                _payoutToWinners(_homePlayers, _share);                
+                emit LogGameWinners(_gameId, _winnerTeam, PLATFORM_PERCENT, _homePlayers, _share);
 
-                _payoutToWinners(_homePlayers, _share);
-                
-                emit LogGameWinners(
-                    _gameId, _winnerTeam, PLATFORM_PERCENT, _homePlayers, _share
-                );
+            } else if ( _tempAwayTeam == _tempWinnerTeam ) {
 
-            } else if ( _keccak256(targetGame.awayTeam) == _keccak256(_winnerTeam) ) {
-
-                address[] memory _awayPlayers = awayPlayers[_gameId];
-
-                uint256 _share = _totalAmountForWinners / _awayPlayers.length;
+                _gameBalance = targetGame.fee * _homePlayers.length;
+                _platformPercent = _gameBalance * PLATFORM_PERCENT / 10000;
+                uint256 _share = (_gameBalance - _platformPercent) / _awayPlayers.length;
 
                 _payoutToWinners(_awayPlayers, _share);
-
-                emit LogGameWinners(
-                    _gameId, _winnerTeam, PLATFORM_PERCENT, _awayPlayers, _share
-                );
+                emit LogGameWinners(_gameId, _winnerTeam, PLATFORM_PERCENT, _awayPlayers, _share);
             }
             // Platform Percentage
             _payTokenFromContract(COMMISSION_RECIPIENT, _platformPercent);
@@ -351,9 +350,18 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         return winners[_gameId];
     }
     
-    // function gameDetail(uint256 _gameId) public view returns(string memory) {
-    //     return games[_gameId].homeTeam;
-    // }
+    function game(uint256 _gameId) public view returns(
+        string memory, string memory, uint256, uint256, uint256, bool
+    ) {
+        return(
+            games[_gameId].homeTeam,
+            games[_gameId].awayTeam,
+            games[_gameId].fee,
+            games[_gameId].startTime,
+            games[_gameId].endTime,
+            games[_gameId].isEnded
+        );
+    }
     /*
     * Internal Functions
     */
