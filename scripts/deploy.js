@@ -3,21 +3,21 @@ const { ethers, upgrades } = require("hardhat");
 async function main() {
  
     const gas = await ethers.provider.getGasPrice()
-    const AdpVoteDeployment = await ethers.getContractFactory('AdpVote');
-    // const ERC20Contract = await ethers.getContractFactory("AdpERC20Contract");
-    // const erc20Contract = await ERC20Contract.deploy("VToken", "VToken");
+    const SoccerDeployment = await ethers.getContractFactory('Soccer');
+    // const ERC20Contract = await ethers.getContractFactory("SoccerERC20");
+    // const erc20Contract = await ERC20Contract.deploy("SoccerToken", "Soccer");
 
-    console.log('Deploying AdpVote...');
+    console.log('Deploying Soccer Contract...');
     // console.log('Deploying ERC20...');
 
-    const adpVote = await upgrades.deployProxy(
-        AdpVoteDeployment, 
-        ["ADPVoting" ], 
+    const soccerV = await upgrades.deployProxy(
+        SoccerDeployment, 
+        [], 
         {  gasPrice: gas, initializer: 'initialize' }
     );
 
-    await adpVote.deployed();
-    console.log("Adpost Voting Contract deployed to:", adpVote.address);
+    await soccerV.deployed();
+    console.log("Soccer Contract address deployed to:", soccerV.address);
     // console.log("ERC20-DEPLOYED TO: ", erc20Contract.address);
 
 }

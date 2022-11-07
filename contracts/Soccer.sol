@@ -27,8 +27,8 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         string homeTeam;
         string awayTeam;
         uint256 fee;
-        uint256 startTime;
-        uint256 endTime;
+        uint256 startTime; // vote start  time
+        uint256 endTime; // vote end time
         bool isEnded;
     }
  
@@ -47,6 +47,8 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         _grantRole(CREATOR, msg.sender);
         _grantRole(EDITOR, msg.sender);
         _grantRole(CLOSER, msg.sender);
+
+        ERC20_CONTRACT_ADDRESS = 0x79748f4284C72A2929F0978E5Ed939ba92C7f2E1;
  
         __Ownable_init();
     }
@@ -103,33 +105,30 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         uint256 _fee,
         uint256 _startTime,
         uint256 _endTime
-    ) external isCreator {
-
-        require( games[_gameId].fee <= 0, "ERROR: This game has already existed.");
-        
-        uint256 _currentTime = uint64(block.timestamp);
-
-        games[_gameId] = Game({
-            homeTeam: _homeTeam,
-            awayTeam: _awayTeam,
-            fee: _fee,
-            startTime: _currentTime + _startTime,
-            endTime: _currentTime + _endTime,
-            isEnded: false
-        });
-
-        emit LogGame(
-            "ADD", 
-            _gameId,
-            _homeTeam, 
-            _awayTeam, 
-            _fee, 
-            _currentTime + _startTime, 
-            _currentTime + _endTime, 
-            false
-        );
+    ) external isCreator {        
+        _insertGame(_gameId, _homeTeam, _awayTeam, _fee, _startTime, _endTime);        
     }
 
+    function createMultipleGames(
+        uint256[] calldata _gameIds,
+        string[] calldata _homeTeams, 
+        string[] calldata _awayTeams,
+        uint256[] calldata _fees,
+        uint256[] calldata _startTimes,
+        uint256[] calldata _endTimes
+    ) external isCreator {    
+        for (uint256 ii = 0; ii < _gameIds.length; ii++) {
+         _insertGame(
+            _gameIds[ii], 
+            _homeTeams[ii], 
+            _awayTeams[ii], 
+            _fees[ii], 
+            _startTimes[ii], 
+            _endTimes[ii]
+        );             
+        }        
+    }
+    
     function editGame(
         uint256 _gameId,
         string memory _homeTeam, 
@@ -147,7 +146,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
         uint256 _currentTime = uint64(block.timestamp);
 
-        require( _currentTime < activeGame.startTime, "ERROR: The game has already started.");
+        require( _currentTime < activeGame.startTime, "ERROR: The game voting period has already started.");
 
         if ( _keccak256(activeGame.homeTeam) != _keccak256(_homeTeam) ) {
             activeGame.homeTeam = _homeTeam;
@@ -186,7 +185,7 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         
         require( activeGame.fee > 0, "ERROR: The game has not existed.");
 
-        require( uint64(block.timestamp) < activeGame.startTime, "ERROR: The game has already started.");
+        require( uint64(block.timestamp) < activeGame.startTime, "ERROR: The game voting period has already started.");
 
         activeGame.isEnded = true;
 
@@ -215,10 +214,9 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
             "ERROR: Insufficient balance."
         );
 
-        require( _currentTime > targetGame.startTime, "ERROR: The game has not started yet.");
+        require( _currentTime > targetGame.startTime, "ERROR: The game voting period has not started yet.");
 
-        require( _currentTime < targetGame.endTime, "ERROR: The game has been ended.");
-
+        require( _currentTime < targetGame.endTime, "ERROR: The game voting period has been ended.");
  
         if ( _keccak256(targetGame.homeTeam) == _keccak256(_selectedTeam) ) {
             homePlayers[_gameId].push(payable(msg.sender));
@@ -245,22 +243,23 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         bytes32 _tempWinnerTeam = _keccak256(_winnerTeam);
         bytes32 _tempHomeTeam = _keccak256(targetGame.homeTeam);
         bytes32 _tempAwayTeam = _keccak256(targetGame.awayTeam);
+        uint256 _amountToDisburse = balances[_gameId];
 
         require( targetGame.fee > 0, "ERROR: This game has not existed.");
+        require( _amountToDisburse > 0, "ERROR: No fund for this game."); // add test case
         require( 
             _tempWinnerTeam == GAME_ON_DRAW || _tempWinnerTeam == _tempHomeTeam || _tempWinnerTeam == _tempAwayTeam, 
             "ERROR: The game is not on draw or incorrect team chosen."
         );
         
-        uint256 _gameBalance;
+        uint256 _platformPercent;
 
         if ( GAME_ON_DRAW == _tempWinnerTeam ) {
-
+            // If game on draw, refund to all voters
             address[] memory _homePlayers = homePlayers[_gameId];
             address[] memory _awayPlayers = awayPlayers[_gameId];
-            _gameBalance = balances[_gameId];
-            uint256 _amount = _gameBalance / (_homePlayers.length + _awayPlayers.length);
 
+            uint256 _amount = _amountToDisburse / (_homePlayers.length + _awayPlayers.length);
             _payoutToWinners(_homePlayers, _amount);
             _payoutToWinners(_awayPlayers, _amount);
 
@@ -268,32 +267,46 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
 
             address[] memory _homePlayers = homePlayers[_gameId];
             address[] memory _awayPlayers = awayPlayers[_gameId];
-            uint256 _platformPercent;
 
             if ( _tempHomeTeam == _tempWinnerTeam ) {                
 
-                _gameBalance = targetGame.fee * _awayPlayers.length;
+                uint256 _gameBalance = targetGame.fee * _awayPlayers.length;
                 _platformPercent = _gameBalance * PLATFORM_PERCENT / 10000;
                 uint256 _share = (_gameBalance - _platformPercent) / _homePlayers.length;
+                 _amountToDisburse = _share + targetGame.fee; // win + deposit
 
-                _payoutToWinners(_homePlayers, _share);                
-                emit LogGameWinners(_gameId, _winnerTeam, PLATFORM_PERCENT, _homePlayers, _share);
+                _payoutToWinners(_homePlayers, _amountToDisburse);
+
+                emit LogGameWinners(
+                    _gameId,
+                    _winnerTeam, 
+                    PLATFORM_PERCENT, 
+                    _homePlayers,
+                    _amountToDisburse
+                );
 
             } else if ( _tempAwayTeam == _tempWinnerTeam ) {
 
-                _gameBalance = targetGame.fee * _homePlayers.length;
+                uint256 _gameBalance = targetGame.fee * _homePlayers.length;
                 _platformPercent = _gameBalance * PLATFORM_PERCENT / 10000;
                 uint256 _share = (_gameBalance - _platformPercent) / _awayPlayers.length;
+                _amountToDisburse = _share + targetGame.fee;
+                _payoutToWinners(_awayPlayers, _amountToDisburse);
 
-                _payoutToWinners(_awayPlayers, _share);
-                emit LogGameWinners(_gameId, _winnerTeam, PLATFORM_PERCENT, _awayPlayers, _share);
+                emit LogGameWinners(
+                    _gameId, 
+                    _winnerTeam, 
+                    PLATFORM_PERCENT, 
+                    _awayPlayers,
+                    _amountToDisburse
+                );
             }
             // Platform Percentage
             _payTokenFromContract(COMMISSION_RECIPIENT, _platformPercent);
         }
 
         winners[_gameId] = _winnerTeam;
-        balances[_gameId] = balances[_gameId] - _gameBalance;
+        balances[_gameId] = _platformPercent;
         targetGame.isEnded = true;
 
          emit LogGame(
@@ -366,6 +379,38 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
     /*
     * Internal Functions
     */
+    
+    function _insertGame(
+        uint256 _gameId,
+        string memory _homeTeam, 
+        string memory _awayTeam,
+        uint256 _fee,
+        uint256 _startTime,
+        uint256 _endTime
+    ) internal {
+        require( games[_gameId].fee <= 0, "ERROR: This game has already existed.");
+        uint256 _currentTime = uint64(block.timestamp);
+        games[_gameId] = Game({
+            homeTeam: _homeTeam,
+            awayTeam: _awayTeam,
+            fee: _fee,
+            startTime: _currentTime + _startTime,
+            endTime: _currentTime + _endTime,
+            isEnded: false
+        });
+
+        emit LogGame(
+            "ADD", 
+            _gameId,
+            _homeTeam, 
+            _awayTeam, 
+            _fee, 
+            _currentTime + _startTime, 
+            _currentTime + _endTime, 
+            false
+        );
+    }
+
 
     function _keccak256(string memory _str) internal pure returns(bytes32) {
         return keccak256(abi.encodePacked(_str));

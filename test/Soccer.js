@@ -9,14 +9,18 @@ const chai = require('chai');
 const amountInWei = (_amount) => parseInt( ethers.utils.parseUnits(_amount, 6) );
 
 const _fee = amountInWei("1");
+// const date = new Date();
+// date.setDate(date.getDate() + 1); 
+// const _start = date.getTime();
 
-const date = new Date();
-date.setDate(date.getDate() + 1); 
-const _start = date.getTime();
+// const _start =  Math.floor(Date.now() / 1000);
+const _start = 1000;
 
-const date2 = new Date();
-date2.setDate(date2.getDate() + 2);
-const _end = date2.getTime();
+// const date2 = new Date();
+// date2.setDate(date2.getDate() + 2);
+// const _end = date2.getTime();
+// const _end =  Math.floor(Date.now() / 1000) + 1000;
+const _end = 1200;
 
 const _gameId = 23222;
 const _home = "MANU";
@@ -157,7 +161,7 @@ describe("Soccer Betting", function () {
 
         await expect(
           SoccerContract.connect(deployedUser).editGame(_gameId, _home, _away, _fee, _start, _end)
-        ).to.be.revertedWith("ERROR: The game has already started.");
+        ).to.be.revertedWith("ERROR: The game voting period has already started.");
 
       });
      
@@ -165,7 +169,8 @@ describe("Soccer Betting", function () {
         
         await SoccerContract.connect(deployedUser).createGame(_gameId, _home, _away, _fee, _start, _end);
         
-        await network.provider.send("evm_increaseTime", [ - _start ]);
+        await network.provider.send("evm_increaseTime", [-_start])
+        await network.provider.send("evm_mine")
 
         await SoccerContract.connect(deployedUser).editGame(_gameId, _home, "LIVERPOOL", _fee, _start, _end);
         
@@ -213,7 +218,7 @@ describe("Soccer Betting", function () {
         await network.provider.send("evm_increaseTime", [_start]);        
         await expect(
           SoccerContract.connect(deployedUser).cancelGame(_gameId)
-        ).to.be.revertedWith("ERROR: The game has already started.");
+        ).to.be.revertedWith("ERROR: The game voting period has already started.");
 
       });
 
@@ -241,10 +246,12 @@ describe("Soccer Betting", function () {
       });
 
       it("Should reject if the game has not started yet.", async function () {
+        // await network.provider.send("evm_increaseTime", [_start])
+        // await network.provider.send("evm_mine");
 
         await expect(
           SoccerContract.connect(user1).play(_gameId, _home)
-        ).to.be.revertedWith("ERROR: The game has not started yet.");
+        ).to.be.revertedWith("ERROR: The game voting period has not started yet.");
 
       });
 
@@ -253,7 +260,7 @@ describe("Soccer Betting", function () {
         await network.provider.send("evm_increaseTime", [_end + 1]);
         await expect(
           SoccerContract.connect(user1).play(_gameId, _home)
-        ).to.be.revertedWith("ERROR: The game has been ended.");
+        ).to.be.revertedWith("ERROR: The game voting period has been ended.");
 
       });
 
@@ -442,8 +449,8 @@ describe("Soccer Betting", function () {
         await SoccerContract.connect(deployedUser).payout(_gameId, "MANU");
         const _user1Balance = parseInt(await erc20.connect(user1).balanceOf(user1.address));
         const _user7Balance = parseInt(await erc20.connect(user7).balanceOf(user7.address));
-        expect( parseInt(_user1Balance) ).to.be.equal(999420000);
-        expect( parseInt(_user7Balance) ).to.be.equal(999420000);
+        expect( parseInt(_user1Balance) ).to.be.equal(1000420000);
+        expect( parseInt(_user7Balance) ).to.be.equal(1000420000);
 
       });
 
@@ -456,13 +463,12 @@ describe("Soccer Betting", function () {
       });
 
       it("Should accept if away team won and away team's sider receive.", async function () {
-
         await SoccerContract.connect(deployedUser).payout(_gameId, "CHELSEA");
         const _user8Balance = parseInt(await erc20.connect(user8).balanceOf(user8.address));
         const _user10Balance = parseInt(await erc20.connect(user10).balanceOf(user10.address));
 
-        expect( parseInt(_user8Balance) ).to.be.equal(1001286666);
-        expect( parseInt(_user10Balance) ).to.be.equal(1001286666);
+        expect( parseInt(_user8Balance) ).to.be.equal(1002286666);
+        expect( parseInt(_user10Balance) ).to.be.equal(1002286666);
 
       });
 

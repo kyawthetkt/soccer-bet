@@ -10,7 +10,7 @@ contract SoccerERC20 is ERC20 {
     uint initialSupply =  2000000 * uint256(10 ** decimals());
 
     constructor(string memory name_, string memory symbol_)
-        ERC20(name_, symbol_)
+    ERC20(name_, symbol_)
     {
         // _mint(msg.sender, initialSupply);
     }
