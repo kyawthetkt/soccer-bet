@@ -236,7 +236,79 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
         emit LogPlay(_gameId, _selectedTeam, msg.sender);
     }
 
+    function payoutInBatch(uint256[] calldata _gameIds, string[] calldata _winnerTeams) external isCloser {
+
+        require( _gameIds.length == _winnerTeams.length, "ERROR: Incorrect batch payout.");
+
+        for (uint256 i = 0; i < _gameIds.length; i++) {
+            _payout(_gameIds[i], _winnerTeams[i]);
+        }
+
+    }
+
     function payout(uint256 _gameId, string memory _winnerTeam) external isCloser {
+        _payout(_gameId, _winnerTeam);
+    }
+    function grantUserRoles(uint8[] memory _roleIds, address _address) external onlyOwner {
+        for (uint256 i = 0; i < _roleIds.length; i++) {
+            if ( _roleIds[i] == 1 ) _grantRole(CREATOR, _address);
+            if ( _roleIds[i] == 2 ) _grantRole(EDITOR, _address);
+            if ( _roleIds[i] == 3 ) _grantRole(CLOSER, _address);
+        }
+    }
+
+    function revokeUserRoles(uint8[] memory _roleIds, address _address) external onlyOwner {
+       for (uint256 i = 0; i < _roleIds.length; i++) {
+            if ( _roleIds[i] == 1 ) _revokeRole(CREATOR, _address);
+            if ( _roleIds[i] == 2 ) _revokeRole(EDITOR, _address);
+            if ( _roleIds[i] == 3 ) _revokeRole(CLOSER, _address);
+        }
+    }
+
+    function setCommission(address _erc20ContractAddress, uint256 _platformPercent, address _commissionRecipient) external onlyOwner {
+        
+        if ( _erc20ContractAddress != address(0) ) {
+            ERC20_CONTRACT_ADDRESS = _erc20ContractAddress;
+        }
+
+        if ( _platformPercent != 0 ) {
+            PLATFORM_PERCENT = _platformPercent;
+        }
+
+        if ( _commissionRecipient != address(0) ) {
+            COMMISSION_RECIPIENT = _commissionRecipient;
+        }
+    }
+ 
+    function transferToAccount(address _receiver, uint256 _amount) external payable onlyOwner {
+        _payTokenFromContract(_receiver, _amount);
+    }
+
+    function getPlayers(uint256 _gameId) public view returns(address[] memory, address[] memory) {
+        return(homePlayers[_gameId], awayPlayers[_gameId]);
+    }
+
+    function getWinners(uint256 _gameId) public view returns(string memory) {
+        return winners[_gameId];
+    }
+    
+    function game(uint256 _gameId) public view returns(
+        string memory, string memory, uint256, uint256, uint256, bool
+    ) {
+        return(
+            games[_gameId].homeTeam,
+            games[_gameId].awayTeam,
+            games[_gameId].fee,
+            games[_gameId].startTime,
+            games[_gameId].endTime,
+            games[_gameId].isEnded
+        );
+    }
+    /*
+    * Internal Functions
+    */
+
+    function _payout(uint256 _gameId, string memory _winnerTeam) internal {
 
         Game storage targetGame = games[_gameId];
 
@@ -320,65 +392,6 @@ contract Soccer is Initializable, OwnableUpgradeable, AccessControlUpgradeable {
             true
         );
     }
-
-    function grantUserRoles(uint8[] memory _roleIds, address _address) external onlyOwner {
-        for (uint256 i = 0; i < _roleIds.length; i++) {
-            if ( _roleIds[i] == 1 ) _grantRole(CREATOR, _address);
-            if ( _roleIds[i] == 2 ) _grantRole(EDITOR, _address);
-            if ( _roleIds[i] == 3 ) _grantRole(CLOSER, _address);
-        }
-    }
-
-    function revokeUserRoles(uint8[] memory _roleIds, address _address) external onlyOwner {
-       for (uint256 i = 0; i < _roleIds.length; i++) {
-            if ( _roleIds[i] == 1 ) _revokeRole(CREATOR, _address);
-            if ( _roleIds[i] == 2 ) _revokeRole(EDITOR, _address);
-            if ( _roleIds[i] == 3 ) _revokeRole(CLOSER, _address);
-        }
-    }
-
-    function setCommission(address _erc20ContractAddress, uint256 _platformPercent, address _commissionRecipient) external onlyOwner {
-        
-        if ( _erc20ContractAddress != address(0) ) {
-            ERC20_CONTRACT_ADDRESS = _erc20ContractAddress;
-        }
-
-        if ( _platformPercent != 0 ) {
-            PLATFORM_PERCENT = _platformPercent;
-        }
-
-        if ( _commissionRecipient != address(0) ) {
-            COMMISSION_RECIPIENT = _commissionRecipient;
-        }
-    }
- 
-    function transferToAccount(address _receiver, uint256 _amount) external payable onlyOwner {
-        _payTokenFromContract(_receiver, _amount);
-    }
-
-    function getPlayers(uint256 _gameId) public view returns(address[] memory, address[] memory) {
-        return(homePlayers[_gameId], awayPlayers[_gameId]);
-    }
-
-    function getWinners(uint256 _gameId) public view returns(string memory) {
-        return winners[_gameId];
-    }
-    
-    function game(uint256 _gameId) public view returns(
-        string memory, string memory, uint256, uint256, uint256, bool
-    ) {
-        return(
-            games[_gameId].homeTeam,
-            games[_gameId].awayTeam,
-            games[_gameId].fee,
-            games[_gameId].startTime,
-            games[_gameId].endTime,
-            games[_gameId].isEnded
-        );
-    }
-    /*
-    * Internal Functions
-    */
     
     function _insertGame(
         uint256 _gameId,
